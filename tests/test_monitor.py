@@ -18,6 +18,35 @@ class Tests(unittest.TestCase):
     def test_enrollment_block_scoping(self):
         self.assertEqual(monitor.parse_page(page(), SECTION)['Total Open Seats'], 3)
 
+    def test_waitlist_independent_and_reopens(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        section = {**SECTION, 'url': 'https://classes.berkeley.edu/node/522854',
+                   'min_open_seats': 1, 'waitlist_capacity': 10}
+        original = {k: v for k, v in section.items() if k != 'waitlist_capacity'}
+        self.assertEqual(monitor.identity(section), monitor.identity(original))
+        state = SimpleNamespace(data={'sections': {monitor.identity(section): True}}, save=Mock())
+        with patch('monitor.telegram') as send:
+            for count in (10, 9, 8, 10, 9):
+                monitor.check_waitlist(section, {'Waitlisted': count}, state)
+            self.assertEqual(send.call_count, 2)
+            self.assertTrue(state.data['sections'][monitor.identity(section)])
+
+    def test_waitlist_missing_capacity_and_failed_delivery(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        section = {**SECTION, 'url': 'https://classes.berkeley.edu/node/522854'}
+        state = SimpleNamespace(data={'sections': {}}, save=Mock())
+        with patch('monitor.telegram') as send:
+            monitor.check_waitlist(section, {'Waitlisted': 0}, state)
+            send.assert_not_called()
+        section['waitlist_capacity'] = 10
+        with patch('monitor.telegram', side_effect=monitor.SafeError('delivery failed')):
+            with self.assertRaises(monitor.SafeError):
+                monitor.check_waitlist(section, {'Waitlisted': 9}, state)
+        self.assertEqual(state.data['sections'], {})
+        state.save.assert_not_called()
+
     def test_negative_seats(self):
         self.assertEqual(monitor.parse_page(page('-2'), SECTION)['Total Open Seats'], -2)
 

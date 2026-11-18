@@ -104,6 +104,9 @@ def load_config(path):
             raise SafeError("Invalid section identity")
         if type(s['min_open_seats']) is not int or s['min_open_seats'] < 1:
             raise SafeError("min_open_seats must be a positive integer")
+        capacity = s.get('waitlist_capacity')
+        if capacity is not None and (type(capacity) is not int or capacity < 0):
+            raise SafeError("waitlist_capacity must be a nonnegative integer or null")
         key = identity(s)
         if key in keys:
             raise SafeError("Duplicate section")
@@ -112,7 +115,7 @@ def load_config(path):
 
 
 def identity(s):
-    return hashlib.sha256(json.dumps(s, sort_keys=True).encode()).hexdigest()
+    return hashlib.sha256(json.dumps({k: v for k, v in s.items() if k != 'waitlist_capacity'}, sort_keys=True).encode()).hexdigest()
 
 
 class State:
@@ -146,6 +149,30 @@ def should_alert(previous, seats, threshold):
     return seats >= threshold and previous is not True
 
 
+def check_waitlist(section, values, state):
+    # Explicit, user-verified waitlist capacity; class Capacity is NOT waitlist capacity.
+    capacity = section.get('waitlist_capacity')
+    if capacity is None:
+        print('Waitlist alert disabled: capacity not configured')
+        return
+    available = max(0, capacity - values['Waitlisted'])
+    print(f'Waitlist available={available} (configured capacity={capacity})')
+    if state is None:
+        return
+    key = 'waitlist:' + identity(section) + ':' + str(capacity)
+    previous = state.data['sections'].get(key)
+    opened = available > 0
+    if should_alert(previous, available, 1):
+        telegram(f'대기명단 여유 감지: {section["term"]} {section["course"]}\n'
+                 f'Class # {section["class_number"]}\n'
+                 f'대기 인원: {values["Waitlisted"]} / 설정한 대기 정원: {capacity}\n'
+                 f'계산된 대기명단 여유: {available}\n'
+                 f'설정한 정원 기준입니다. 실제 신청 가능 여부는 CalCentral에서 확인하세요.\n{section["url"]}')
+    if previous is not opened:
+        state.data['sections'][key] = opened
+        state.save()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--config', default='config.json')
@@ -164,6 +191,7 @@ def main():
             seats = values['Total Open Seats']
             print(f'Section {index}: open={seats}, enrolled={values["Enrolled"]}, waitlisted={values["Waitlisted"]}')
             if state is None:
+                check_waitlist(s, values, None)
                 continue
             key = identity(s)
             previous = state.data['sections'].get(key)
@@ -173,6 +201,7 @@ def main():
             if previous is not opened:
                 state.data['sections'][key] = opened
                 state.save()
+            check_waitlist(s, values, state)
         except (SafeError, ValueError, KeyError, UnicodeError) as exc:
             # Do not print server bodies, URLs, tokens, chat IDs, or raw exceptions.
             print(f'Section {index}: check/delivery/state failed; inspect source access and configuration.', file=sys.stderr)

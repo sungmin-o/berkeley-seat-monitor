@@ -19,7 +19,8 @@
       "course": "PHYSICS 141B",
       "class_number": "28460",
       "url": "https://classes.berkeley.edu/content/2027-spring-physics-141b-001-lec-001",
-      "min_open_seats": 1
+      "min_open_seats": 1,
+      "waitlist_capacity": 5
     }
   ]
 }

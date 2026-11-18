@@ -109,3 +109,9 @@ Berkeley GET만 일시 오류(429/일부 5xx/네트워크)에 최대 3번 제한
 - [Telegram Bot API](https://core.telegram.org/bots/api#sendmessage): sendMessage, chat_id, 응답 ok 판정.
 
 단위 테스트는 **합성 HTML**과 모의 네트워크로 section 혼동, 누락/변경/차단 페이지 거부, 중복 억제, 재열림, 전송 실패 시 상태 보존, 토큰 비노출을 확인합니다. 실제 GitHub 저장소는 생성/배포하지 않았고 사용자 비밀값도 등록하지 않았습니다.
+
+### Optional waitlist alerts
+
+Add `"waitlist_capacity": N` to a section only after verifying its waitlist limit in CalCentral. Omit it to disable waitlist alerts. The ordinary class `Capacity` is not a waitlist limit. This limit is manually configured and must be updated if Berkeley changes it.
+
+The monitor alerts when Waitlisted is below this configured limit on the first check, or after the waitlist fills and then has room again. It keeps waitlist and enrollment alerts separate, preserves existing seat state, and does not repeat alerts while room remains. Actual eligibility and enrollment restrictions must be checked in CalCentral.
